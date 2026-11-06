@@ -6,4 +6,93 @@ function save(){localStorage.setItem(KEY,JSON.stringify(data))}try{let d=JSON.pa
 function setup(){ $('names').innerHTML=data.names.map((n,i)=>`<label>Team ${i+1}<input data-name="${i}" value="${esc(n)}" maxlength="35"></label>`).join('');$('questionInputs').innerHTML=data.questions.map((arr,g)=>`<div class="panel"><h2>Fragen von <span id="heading${g}">${esc(data.names[g])}</span></h2>${arr.map((q,j)=>`<label><span class="small muted">Frage ${j+1}</span><textarea data-group="${g}" data-q="${j}" placeholder="Frage ${j+1}">${esc(q)}</textarea></label>`).join('')}</div>`).join('');document.querySelectorAll('[data-name]').forEach(el=>el.addEventListener('input',()=>{data.names[+el.dataset.name]=el.value;$('heading'+el.dataset.name).textContent=el.value;save()}));document.querySelectorAll('[data-q]').forEach(el=>el.addEventListener('input',()=>{data.questions[+el.dataset.group][+el.dataset.q]=el.value;save()}))}setup();
 $('demo').onclick=()=>{if(!confirm('Testfragen einfügen? Vorhandene Fragen werden überschrieben.'))return;data.questions=data.questions.map((_,g)=>Array.from({length:10},(_,i)=>`Testfrage ${i+1} von ${data.names[g]} – hier später die echte Frage eintragen.`));save();setup()};function show(id){['setup','game','final'].forEach(k=>$(k).classList.toggle('hidden',k!==id))};function ownerId(){return index%4}function qNum(){return Math.floor(index/4)}function renderScores(){ $('scores').innerHTML=data.names.map((n,i)=>`<div class="score ${i===ownerId()?'owner':''}"><div>${esc(n)}</div><strong>${scores[i]}</strong><span class="small muted">${i===ownerId()?'Stellt die Frage':'Punkte'}</span></div>`).join('')};function clearTimer(){if(timer){clearInterval(timer);timer=null}}function renderQuestion(){clearTimer();shown=false;answerer=null;helper=null;award=null;$('grading').classList.add('hidden');$('supplement').classList.add('hidden');$('preQuestion').classList.remove('hidden');$('countdown').classList.add('hidden');$('question').classList.remove('hidden');$('question').textContent='Die nächste Frage wartet …';$('owner').textContent=`${data.names[ownerId()]} stellt die Frage`;$('progress').textContent=`FRAGE ${index+1} / 40 · RUNDE ${qNum()+1} / 10`;$('next').disabled=true;$('next').textContent=index===39?'Wertung bestätigen & Siegerehrung 🏆':'Wertung bestätigen & nächste Frage →';$('gradeMsg').textContent='';renderScores()};function revealNow(){clearTimer();shown=true;$('countdown').classList.add('hidden');$('question').classList.remove('hidden');$('question').textContent=data.questions[ownerId()][qNum()];$('preQuestion').classList.add('hidden');$('grading').classList.remove('hidden');renderAnswerers()};$('reveal').onclick=()=>{let remaining=10;$('question').classList.add('hidden');$('countdown').classList.remove('hidden');$('countdown').textContent=remaining;$('reveal').disabled=true;$('skipTimer').disabled=true;timer=setInterval(()=>{remaining--;$('countdown').textContent=remaining;if(remaining<=0){$('reveal').disabled=false;$('skipTimer').disabled=false;revealNow()}},1000)};$('skipTimer').onclick=()=>{ $('reveal').disabled=false;$('skipTimer').disabled=false;revealNow()};function buttons(container,excluded,selected,fn){$(container).innerHTML=data.names.map((n,i)=>excluded.includes(i)?'':`<button class="choice ${selected===i?'selected':''}" data-pick="${i}">${esc(n)}</button>`).join('');$(container).querySelectorAll('button').forEach(b=>b.onclick=()=>fn(+b.dataset.pick))};function renderAnswerers(){buttons('answerers',[ownerId()],answerer,i=>{answerer=i;helper=null;award=null;$('next').disabled=true;$('supplement').classList.add('hidden');$('gradeMsg').textContent='';renderAnswerers()})};function renderHelpers(){buttons('helpers',[ownerId(),answerer],helper,i=>{helper=i;renderHelpers();$('next').disabled=false;$('gradeMsg').textContent=`${data.names[answerer]} +1 und ${data.names[helper]} +1`})}function chooseAward(type){if(answerer===null){$('gradeMsg').textContent='Bitte zuerst die antwortende Gruppe auswählen.';return}award=type;helper=null;if(type==='partial'){$('supplement').classList.remove('hidden');renderHelpers();$('next').disabled=true;$('gradeMsg').textContent='Bitte die ergänzende Gruppe auswählen.'}else{$('supplement').classList.add('hidden');$('next').disabled=false;$('gradeMsg').textContent=type==='full'?`${data.names[answerer]} erhält 2 Punkte.`:'Keine Punkte für diese Frage.'}}$('full').onclick=()=>chooseAward('full');$('partial').onclick=()=>chooseAward('partial');$('zero').onclick=()=>chooseAward('zero');
 $('next').onclick=()=>{if(!shown||award===null||answerer===null||(award==='partial'&&helper===null))return;history.push({index,scores:[...scores]});if(award==='full')scores[answerer]+=2;if(award==='partial'){scores[answerer]++;scores[helper]++}index++;if(index>=40)finish();else renderQuestion()};$('undo').onclick=()=>{if(!history.length)return;const h=history.pop();index=h.index;scores=h.scores;show('game');renderQuestion()};$('reset').onclick=()=>{if(!confirm('Punktestände zurücksetzen und das Spiel neu starten? Die Fragen bleiben erhalten.'))return;clearTimer();scores=[0,0,0,0];index=0;history=[];show('game');renderQuestion()};$('start').onclick=()=>{const empty=[];for(let g=0;g<4;g++)for(let q=0;q<10;q++)if(!data.questions[g][q].trim())empty.push(`${data.names[g]} / Frage ${q+1}`);if(data.names.some(n=>!n.trim())){$('setupError').textContent='Bitte alle Gruppennamen eintragen.';return}if(empty.length){$('setupError').textContent=`Noch ${empty.length} Fragen leer (z. B. ${empty[0]}).`;return}save();scores=[0,0,0,0];index=0;history=[];show('game');renderQuestion()};$('edit').onclick=()=>{clearTimer();show('setup')};$('projector').onclick=()=>{document.body.classList.toggle('projector');$('projector').textContent=document.body.classList.contains('projector')?'🎛 Steuerung einblenden':'🎥 Beamer-Modus'};function finish(){clearTimer();show('final');const order=[0,1,2,3].sort((a,b)=>scores[b]-scores[a]||a-b),max=Math.max(...scores),winners=order.filter(i=>scores[i]===max);$('winner').textContent=winners.length===1?`🎉 ${data.names[winners[0]]} gewinnt mit ${max} Punkten!`:`🎉 Gleichstand auf Platz 1: ${winners.map(i=>data.names[i]).join(' & ')} (${max} Punkte)`;const display=[order[1],order[0],order[2]];$('podium').innerHTML=display.map((i,pos)=>`<div class="pod ${pos===1?'first':pos===2?'third':''}"><div class="name">${esc(data.names[i])}</div><div class="pts">${scores[i]} Punkte</div><div class="step">${pos===1?'🥇':pos===0?'🥈':'🥉'}</div></div>`).join('');$('allResults').innerHTML=`4. Platz: ${esc(data.names[order[3]])} · ${scores[order[3]]} Punkte`};$('playAgain').onclick=()=>{scores=[0,0,0,0];index=0;history=[];show('game');renderQuestion()};$('changeQuestions').onclick=()=>show('setup');
+</script><script>
+/* Zwei-Fenster-Synchronisierung: nur ein Fenster ist Spielleitung. */
+(()=>{
+const SYNC_KEY='pflege_quizshow_live_v2';
+let viewer=false, lastSent='', lastReceived=0, countdownEnd=0, viewerClock=null;
+const channel=typeof BroadcastChannel!=='undefined'?new BroadcastChannel(SYNC_KEY):null;
+const oldReveal=revealNow;
+revealNow=function(){countdownEnd=0;oldReveal();publish(true)};
+const oldRender=renderQuestion;
+renderQuestion=function(){countdownEnd=0;oldRender();publish(true)};
+const oldFinish=finish;
+finish=function(){countdownEnd=0;oldFinish();publish(true)};
+function snapshot(){
+ const screen=!$('final').classList.contains('hidden')?'final':!$('game').classList.contains('hidden')?'game':'setup';
+ return {screen,index,scores:[...scores],shown,owner:ownerId(),countdownEnd,
+   grading:!$('grading').classList.contains('hidden'),
+   question:$('question').textContent, names:[...data.names],
+   questions:data.questions,at:Date.now()};
+}
+function publish(force=false){
+ if(viewer)return;
+ const state=snapshot();
+ const signature=JSON.stringify({...state,at:0});
+ if(!force&&signature===lastSent)return;
+ lastSent=signature;
+ const msg={...state,at:Date.now()};
+ try{localStorage.setItem(SYNC_KEY,JSON.stringify(msg))}catch(e){}
+ try{channel?.postMessage(msg)}catch(e){}
+}
+function apply(msg){
+ if(!viewer||!msg||msg.at<lastReceived)return;
+ lastReceived=msg.at;
+ if(Array.isArray(msg.names)&&msg.names.length===4)data.names=[...msg.names];
+ if(Array.isArray(msg.questions)&&msg.questions.length===4)data.questions=msg.questions;
+ if(Array.isArray(msg.scores)&&msg.scores.length===4)scores=[...msg.scores];
+ index=Number(msg.index)||0;
+ clearTimer();
+ if(viewerClock){clearInterval(viewerClock);viewerClock=null}
+ if(msg.screen==='final'){finish();return}
+ if(msg.screen==='setup'){show('setup');setup();return}
+ show('game');
+ $('progress').textContent=`FRAGE ${index+1} / 40 · RUNDE ${Math.floor(index/4)+1} / 10`;
+ $('owner').textContent=`${data.names[index%4]} stellt die Frage`;
+ renderScores();
+ $('grading').classList.add('hidden');
+ $('preQuestion').classList.add('hidden');
+ if(msg.countdownEnd&&msg.countdownEnd>Date.now()){
+   $('question').classList.add('hidden');$('countdown').classList.remove('hidden');
+   const tick=()=>{
+     const remaining=Math.max(0,Math.ceil((msg.countdownEnd-Date.now())/1000));
+     $('countdown').textContent=remaining;
+     if(remaining===0){clearInterval(viewerClock);viewerClock=null;$('countdown').classList.add('hidden');$('question').classList.remove('hidden');$('question').textContent=data.questions[index%4][Math.floor(index/4)]||''}
+   };
+   tick();viewerClock=setInterval(tick,100);
+ }else{
+   $('countdown').classList.add('hidden');$('question').classList.remove('hidden');
+   $('question').textContent=msg.shown?data.questions[index%4][Math.floor(index/4)]||msg.question:'Die nächste Frage wartet …';
+ }
+}
+function becomeViewer(){
+ viewer=true;
+ document.body.classList.add('projector');
+ $('projector').textContent='🎛 Steuerung einblenden';
+ const saved=localStorage.getItem(SYNC_KEY);
+ if(saved){try{apply(JSON.parse(saved))}catch(e){}}
+}
+function becomeController(){viewer=false;lastReceived=0;publish(true)}
+// Das ursprüngliche Umschalten bleibt erhalten, ergänzt um die Rollenverteilung.
+const originalProjector=$('projector').onclick;
+$('projector').onclick=()=>{
+ originalProjector();
+ if(document.body.classList.contains('projector'))becomeViewer();else becomeController();
+};
+// Countdown-Start im Steuerungsfenster: gemeinsame absolute Endzeit.
+$('reveal').addEventListener('click',()=>{if(!viewer){countdownEnd=Date.now()+10000;publish(true)} });
+$('skipTimer').addEventListener('click',()=>{if(!viewer){countdownEnd=0;publish(true)}});
+// Die originale Spiellogik bleibt vollständig erhalten.
+['start','next','undo','reset','edit','playAgain','changeQuestions','demo'].forEach(id=>{
+ $(id).addEventListener('click',()=>{if(!viewer)setTimeout(()=>publish(true),0)});
+});
+window.addEventListener('storage',e=>{
+ if(e.key===SYNC_KEY&&e.newValue){try{apply(JSON.parse(e.newValue))}catch(err){}}
+});
+if(channel)channel.onmessage=e=>apply(e.data);
+// Auch während des Countdowns und bei sonstigen Änderungen aktualisieren.
+setInterval(()=>{if(!viewer)publish()},300);
+// Initialen Zustand für neu geöffnete Fenster bereitstellen.
+publish(true);
+})();
 </script></body></html>
